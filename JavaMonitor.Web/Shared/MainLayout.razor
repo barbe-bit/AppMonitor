@@ -1,0 +1,38 @@
+@inherits LayoutComponentBase
+
+<div class="min-vh-100 d-flex flex-column">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">
+                <span class="me-2">📡</span>监控中心
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navMenu">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navMenu">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <NavLink class="nav-link" href="/" Match="NavLinkMatch.All">
+                            <span class="oi oi-dashboard me-1"></span>监控面板
+                        </NavLink>
+                    </li>
+                    <li class="nav-item">
+                        <NavLink class="nav-link" href="/monitor/add">
+                            <span class="oi oi-plus me-1"></span>添加监控
+                        </NavLink>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <main class="flex-grow-1 py-4">
+        <div class="container-fluid px-4">
+            @Body
+        </div>
+    </main>
+
+    <footer class="py-3 bg-white border-top text-center text-muted">
+        <small>📡 应用监控中心 © 2026</small>
+    </footer>
+</div>

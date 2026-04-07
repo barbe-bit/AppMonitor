@@ -1,0 +1,382 @@
+@page "/"
+@using JavaMonitor.Core.Entities
+@using JavaMonitor.Core.Services
+@using Microsoft.AspNetCore.SignalR.Client
+@inject MonitorService MonitorService
+@inject IJSRuntime JS
+@inject NavigationManager NavigationManager
+@implements IAsyncDisposable
+
+<PageTitle>监控面板 - 监控中心</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4 class="mb-0 fw-bold">
+        <span class="text-primary me-2">&#128202;</span>监控面板
+        @if (hubConnected)
+        {
+            <span class="badge bg-success ms-2" style="font-size:0.65rem;vertical-align:middle;" title="实时推送已连接">
+                &#9679; 实时
+            </span>
+        }
+        else
+        {
+            <span class="badge bg-secondary ms-2" style="font-size:0.65rem;vertical-align:middle;" title="定时刷新模式">
+                &#8635; 轮询
+            </span>
+        }
+    </h4>
+    <div class="d-flex align-items-center gap-2">
+        <small class="text-muted">上次刷新: @lastRefreshTime.ToString("HH:mm:ss")</small>
+        <button class="btn btn-outline-secondary btn-sm" @onclick="RefreshData" disabled="@isLoading">
+            @if (isLoading)
+            {
+                <span class="spinner-border spinner-border-sm me-1"></span>
+            }
+            else
+            {
+                <span class="oi oi-reload me-1"></span>
+            }
+            刷新
+        </button>
+    </div>
+</div>
+
+<!-- 统计卡片 -->
+<div class="row g-3 mb-4">
+    <div class="col-sm-4">
+        <div class="card text-white bg-primary">
+            <div class="card-body py-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="small opacity-75">监控总数</div>
+                        <div class="fs-2 fw-bold">@targets.Count</div>
+                    </div>
+                    <span class="oi oi-list fs-3 opacity-50"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-4">
+        <div class="card text-white bg-success">
+            <div class="card-body py-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="small opacity-75">在线</div>
+                        <div class="fs-2 fw-bold">@onlineCount</div>
+                    </div>
+                    <span class="oi oi-check fs-3 opacity-50"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-4">
+        <div class="card text-white @(offlineCount > 0 ? "bg-danger" : "bg-secondary")">
+            <div class="card-body py-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="small opacity-75">离线</div>
+                        <div class="fs-2 fw-bold">@offlineCount</div>
+                    </div>
+                    <span class="oi oi-warning fs-3 opacity-50"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 告警提示 -->
+@if (alerts.Any())
+{
+    <div class="alert alert-danger mb-4">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <h6 class="mb-0 fw-bold">⚠️ 未处理告警（@alerts.Count 条）</h6>
+        </div>
+        @foreach (var alert in alerts)
+        {
+            <div class="d-flex justify-content-between align-items-center py-1 border-top mt-1">
+                <span>
+                    <strong>@alert.Target?.Name</strong>
+                    <span class="text-muted ms-2 small">@alert.Details</span>
+                </span>
+                <button class="btn btn-sm btn-outline-light" @onclick="() => AcknowledgeAlert(alert.Id)">
+                    确认
+                </button>
+            </div>
+        }
+    </div>
+}
+
+<!-- 监控列表 -->
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span>监控目标列表</span>
+        <a href="/monitor/add" class="btn btn-primary btn-sm">
+            <span class="oi oi-plus me-1"></span>添加监控
+        </a>
+    </div>
+    <div class="card-body p-0">
+        @if (targets.Any())
+        {
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width:100px">状态</th>
+                            <th>名称</th>
+                            <th>地址</th>
+                            <th style="width:120px">响应时间</th>
+                            <th style="width:120px">最后检测</th>
+                            <th style="width:160px">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var target in targets)
+                        {
+                            var (isOnline, responseMs, hasAlert) = GetStatus(target);
+                            <tr class="@(hasAlert ? "table-danger" : "")">
+                                <td class="align-middle">
+                                    @if (target.IsEnabled)
+                                    {
+                                        @if (isOnline)
+                                        {
+                                            <span class="badge bg-success">
+                                                <span class="status-dot status-online d-inline-block"></span>在线
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-danger">
+                                                <span class="status-dot status-offline d-inline-block"></span>离线
+                                            </span>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary">已禁用</span>
+                                    }
+                                </td>
+                                <td class="align-middle">
+                                    <div class="fw-semibold">@target.Name</div>
+                                    @if (!string.IsNullOrEmpty(target.Description))
+                                    {
+                                        <div class="text-muted small">@target.Description</div>
+                                    }
+                                </td>
+                                <td class="align-middle">
+                                    <code class="small">@target.Host:@target.Port</code>
+                                </td>
+                                <td class="align-middle">
+                                    @if (responseMs >= 0)
+                                    {
+                                        <span class="@(responseMs > 1000 ? "text-danger" : responseMs > 500 ? "text-warning" : "text-success") fw-semibold">
+                                            @responseMs ms
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">—</span>
+                                    }
+                                </td>
+                                <td class="align-middle">
+                                    <small class="text-muted">
+                                        @if (latestRecords.TryGetValue(target.Id, out var rec))
+                                        {
+                                            @rec.CheckedAt.ToString("HH:mm:ss")
+                                        }
+                                        else
+                                        {
+                                            <span>未检测</span>
+                                        }
+                                    </small>
+                                </td>
+                                <td class="align-middle">
+                                    <div class="btn-group btn-group-sm">
+                                        <button class="btn btn-outline-info" @onclick="() => ManualCheck(target.Id)" title="立即检测">
+                                            <span class="oi oi-reload"></span>
+                                        </button>
+                                        <a href="/monitor/edit/@target.Id" class="btn btn-outline-primary" title="编辑">
+                                            <span class="oi oi-pencil"></span>
+                                        </a>
+                                        <button class="btn btn-outline-danger" @onclick="() => DeleteTarget(target.Id)" title="删除">
+                                            <span class="oi oi-trash"></span>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+        else
+        {
+            <div class="text-center py-5 text-muted">
+                <div class="fs-1 mb-3">📡</div>
+                <p>暂无监控目标</p>
+                <a href="/monitor/add" class="btn btn-primary">添加第一个监控</a>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private List<MonitorTarget> targets = new();
+    private List<AlertRecord> alerts = new();
+    private Dictionary<int, MonitorRecord> latestRecords = new();
+    private bool isLoading = false;
+    private DateTime lastRefreshTime = DateTime.Now;
+
+    // SignalR
+    private HubConnection? hubConnection;
+    private bool hubConnected;
+
+    // 定时器兜底（60秒轮询）
+    private System.Threading.Timer? _refreshTimer;
+
+    private int onlineCount => targets.Where(t => t.IsEnabled).Count(t => GetStatus(t).IsOnline);
+    private int offlineCount => targets.Where(t => t.IsEnabled).Count(t => !GetStatus(t).IsOnline);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+        await InitSignalR();
+        StartPollingTimer();
+    }
+
+    // ─────────────────────────────────────────────
+    // SignalR：订阅后台推送
+    // ─────────────────────────────────────────────
+    private async Task InitSignalR()
+    {
+        try
+        {
+            hubConnection = new HubConnectionBuilder()
+                .WithUrl(NavigationManager.ToAbsoluteUri("/monitorHub"))
+                .WithAutomaticReconnect()
+                .Build();
+
+            // 收到状态更新 → 刷新数据
+            hubConnection.On<StatusUpdateDto>("ReceiveStatusUpdate", async (_) =>
+            {
+                await InvokeAsync(async () =>
+                {
+                    await LoadData();
+                    StateHasChanged();
+                });
+            });
+
+            // 收到告警 → 刷新数据
+            hubConnection.On<AlertDto>("ReceiveAlert", async (_) =>
+            {
+                await InvokeAsync(async () =>
+                {
+                    await LoadData();
+                    StateHasChanged();
+                });
+            });
+
+            hubConnection.Closed += async (_) =>
+            {
+                await InvokeAsync(() => { hubConnected = false; StateHasChanged(); });
+            };
+            hubConnection.Reconnected += async (_) =>
+            {
+                await InvokeAsync(() => { hubConnected = true; StateHasChanged(); });
+            };
+
+            await hubConnection.StartAsync();
+            hubConnected = true;
+        }
+        catch
+        {
+            // SignalR 连接失败不影响页面，依靠定时器兜底
+        }
+    }
+
+    // ─────────────────────────────────────────────
+    // 定时器兜底：每 30 秒自动刷新
+    // ─────────────────────────────────────────────
+    private void StartPollingTimer()
+    {
+        _refreshTimer = new System.Threading.Timer(async _ =>
+        {
+            await InvokeAsync(async () =>
+            {
+                await LoadData();
+                StateHasChanged();
+            });
+        }, null, TimeSpan.FromSeconds(60), TimeSpan.FromSeconds(60));
+    }
+
+    // ─────────────────────────────────────────────
+    // 数据加载
+    // ─────────────────────────────────────────────
+    private async Task LoadData()
+    {
+        isLoading = true;
+        try
+        {
+            targets = await MonitorService.GetAllTargetsAsync();
+            alerts = await MonitorService.GetUnacknowledgedAlertsAsync();
+            latestRecords = await MonitorService.GetLatestRecordsAsync();
+            lastRefreshTime = DateTime.Now;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task RefreshData()
+    {
+        await LoadData();
+        StateHasChanged();
+    }
+
+    private (bool IsOnline, int ResponseMs, bool HasAlert) GetStatus(MonitorTarget target)
+    {
+        if (latestRecords.TryGetValue(target.Id, out var rec))
+        {
+            var hasAlert = alerts.Any(a => a.TargetId == target.Id && a.AlertType == "Down");
+            return (rec.IsOnline, rec.ResponseTimeMs, hasAlert);
+        }
+        return (false, -1, false);
+    }
+
+    private async Task ManualCheck(int targetId)
+    {
+        var target = await MonitorService.GetTargetByIdAsync(targetId);
+        if (target != null)
+        {
+            await MonitorService.CheckTargetAsync(target);
+            await RefreshData();
+        }
+    }
+
+    private async Task AcknowledgeAlert(int alertId)
+    {
+        await MonitorService.AcknowledgeAlertAsync(alertId);
+        await RefreshData();
+    }
+
+    private async Task DeleteTarget(int targetId)
+    {
+        if (await JS.InvokeAsync<bool>("confirm", "确定要删除这个监控目标吗？"))
+        {
+            await MonitorService.DeleteTargetAsync(targetId);
+            await RefreshData();
+        }
+    }
+
+    // ─────────────────────────────────────────────
+    // 清理资源
+    // ─────────────────────────────────────────────
+    public async ValueTask DisposeAsync()
+    {
+        _refreshTimer?.Dispose();
+        if (hubConnection != null)
+        {
+            await hubConnection.DisposeAsync();
+        }
+    }
+}

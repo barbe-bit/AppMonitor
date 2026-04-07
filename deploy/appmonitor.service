@@ -1,0 +1,23 @@
+[Unit]
+Description=AppMonitor - Application Monitoring Service
+Documentation=https://github.com/barbe-bit/AppMonitor
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/opt/appmonitor
+ExecStart=/opt/appmonitor/AppMonitor.Web
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=appmonitor
+
+# Environment variables
+Environment=ASPNETCORE_URLS=http://+:8080
+Environment=TZ=Asia/Shanghai
+
+[Install]
+WantedBy=multi-user.target

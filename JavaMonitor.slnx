@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="JavaMonitor.Core/JavaMonitor.Core.csproj" />
+  <Project Path="JavaMonitor.Web/JavaMonitor.Web.csproj" />
+</Solution>

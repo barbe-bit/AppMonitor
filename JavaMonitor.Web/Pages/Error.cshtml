@@ -1,0 +1,24 @@
+﻿@page
+@model JavaMonitor.Web.Pages.ErrorModel
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>错误 - Java监控</title>
+    <base href="~/" />
+    <link rel="stylesheet" href="css/site.css" />
+</head>
+<body>
+    <div class="container mt-5">
+        <div class="alert alert-danger">
+            <h1 class="alert-heading">😟 发生错误</h1>
+            <p>页面加载时出现问题。请返回首页重试。</p>
+            <hr>
+            <p class="mb-0"><small>@Model.ErrorMessage</small></p>
+            <a href="/" class="btn btn-primary mt-3">返回首页</a>
+        </div>
+    </div>
+</body>
+</html>

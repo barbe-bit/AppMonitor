@@ -1,0 +1,67 @@
+# Build outputs
+bin/
+obj/
+out/
+
+# .NET
+*.user
+*.userosscache
+*.sln.docstates
+*.suo
+*.cache
+*.dll
+*.exe
+*.pdb
+*.mdb
+*.winmd
+*.log
+
+# IDE
+.vs/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Rider
+.idea/
+
+# macOS
+.DS_Store
+
+# Database
+*.db
+*.db-shm
+*.db-wal
+
+# Published files (can be regenerated)
+publish/
+deploy/*.tar.gz
+
+# Logs
+*.log
+logs/
+
+# OS files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Test results
+TestResults/
+coverage/
+
+# NuGet
+packages/
+*.nupkg
+
+# Node (if any)
+node_modules/
+
+# WorkBuddy (internal workspace data)
+.workbuddy/
+
+# Temporary files
+*.tmp
+*.bak
+*.orig

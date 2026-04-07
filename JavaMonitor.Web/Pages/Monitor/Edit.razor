@@ -1,0 +1,157 @@
+@page "/monitor/edit/{Id:int}"
+@using JavaMonitor.Core.Entities
+@using JavaMonitor.Core.Services
+@inject MonitorService MonitorService
+@inject NavigationManager Navigation
+
+<PageTitle>编辑监控 - 监控中心</PageTitle>
+
+@if (model == null)
+{
+    <div class="d-flex justify-content-center py-5">
+        <div class="spinner-border text-primary"></div>
+        <span class="ms-3 text-muted">加载中...</span>
+    </div>
+}
+else
+{
+    <div class="row justify-content-center">
+        <div class="col-lg-7 col-md-9">
+
+            <div class="d-flex align-items-center mb-4">
+                <a href="/" class="btn btn-outline-secondary btn-sm me-3">
+                    <span class="oi oi-chevron-left me-1"></span>返回
+                </a>
+                <h5 class="mb-0 fw-bold">编辑监控目标</h5>
+            </div>
+
+            @if (!string.IsNullOrEmpty(errorMsg))
+            {
+                <div class="alert alert-danger">@errorMsg</div>
+            }
+
+            <div class="card">
+                <div class="card-body p-4">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">应用名称 <span class="text-danger">*</span></label>
+                        <input class="form-control" @bind="model.Name" placeholder="例如：用户服务" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">目标地址 <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <select class="form-select flex-shrink-0" style="max-width:110px" @bind="protocol" @bind:after="OnProtocolChanged">
+                                <option value="tcp">TCP</option>
+                                <option value="http">HTTP</option>
+                                <option value="https">HTTPS</option>
+                            </select>
+                            <input class="form-control" @bind="model.Host" placeholder="IP 或域名" />
+                            <span class="input-group-text">:</span>
+                            <input class="form-control" type="number" style="max-width:90px" @bind="model.Port" min="1" max="65535" />
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">超时时间（秒）</label>
+                            <input class="form-control" type="number" @bind="model.TimeoutSeconds" min="1" max="60" />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">检测间隔（秒）</label>
+                            <input class="form-control" type="number" @bind="model.IntervalSeconds" min="10" max="3600" />
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">备注</label>
+                        <textarea class="form-control" @bind="model.Description" rows="2"></textarea>
+                    </div>
+
+                    <div class="form-check mb-4">
+                        <input class="form-check-input" type="checkbox" id="isEnabled" @bind="model.IsEnabled" />
+                        <label class="form-check-label" for="isEnabled">启用监控</label>
+                    </div>
+
+                    <div class="d-flex gap-2 justify-content-end">
+                        <a href="/" class="btn btn-light">取消</a>
+                        <button class="btn btn-primary" @onclick="HandleSubmit" disabled="@isSaving">
+                            @if (isSaving)
+                            {
+                                <span class="spinner-border spinner-border-sm me-1"></span>
+                            }
+                            <span class="oi oi-check me-1"></span>保存
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+
+    private MonitorTarget? model;
+    private string protocol = "tcp";
+    private string? errorMsg;
+    private bool isSaving = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        model = await MonitorService.GetTargetByIdAsync(Id);
+        if (model != null)
+        {
+            protocol = model.Port == 443 ? "https" : model.Port == 80 ? "http" : "tcp";
+        }
+    }
+
+    private void OnProtocolChanged()
+    {
+        if (model == null) return;
+        model.Port = protocol switch
+        {
+            "https" => 443,
+            "http" => 80,
+            _ => model.Port
+        };
+    }
+
+    private async Task HandleSubmit()
+    {
+        if (model == null) return;
+        errorMsg = null;
+
+        if (string.IsNullOrWhiteSpace(model.Name))
+        {
+            errorMsg = "请填写应用名称";
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(model.Host))
+        {
+            errorMsg = "请填写目标地址";
+            return;
+        }
+
+        model.Host = model.Host
+            .Replace("https://", "")
+            .Replace("http://", "")
+            .Split('/')[0]
+            .Trim();
+
+        isSaving = true;
+        try
+        {
+            await MonitorService.UpdateTargetAsync(model);
+            Navigation.NavigateTo("/");
+        }
+        catch (Exception ex)
+        {
+            errorMsg = $"保存失败：{ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+}
